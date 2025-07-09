@@ -13,8 +13,8 @@ Route::get('/', function () {
 
 
 
-    
-    return redirect()->to('/admin');
+
+    return redirect()->to('/');
 });
 
 
