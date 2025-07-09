@@ -3,6 +3,7 @@
 namespace App\Filament\Pages;
 
 use App\Filament\Resources\PurchaseInvoiceResource;
+use App\Models\Category;
 use Filament\Pages\Page;
 use App\Models\Product;
 use App\Models\Supplier;
@@ -14,7 +15,8 @@ use Filament\Forms;
 use Filament\Notifications\Notification;
 use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
-use Filament\Forms\Components\{TextInput, Select, Grid, Repeater, Section, Hidden};
+use Filament\Forms\Components\{TextInput, Select, Grid, Repeater, Section, Hidden, View};
+use Filament\Forms\Components\Actions\Action;
 
 class CreatePurchaseInvoice extends Page implements HasForms
 {
@@ -82,79 +84,134 @@ class CreatePurchaseInvoice extends Page implements HasForms
                 ]),
 
                 Section::make('المنتجات')->schema([
-                    Repeater::make('items')
-                        ->label('')
-                        ->defaultItems(1)
-                        ->createItemButtonLabel('إضافة منتج')
-                        ->schema([
-                            Grid::make(3)->schema([
-                                TextInput::make('product_barcode')
-                                    ->label('الباركود')
-                                    ->reactive()
-                                    ->afterStateUpdated(function ($state, callable $set) {
-                                        $product = Product::where('barcode', $state)->first();
-                                        if ($product) {
-                                            $set('product_name', $product->name);
-                                            $set('purchase_price', $product->purchase_price);
-                                            $set('retail_price', $product->retail_price);
-                                            $set('wholesale_price', $product->wholesale_price);
-                                        }
-                                    }),
+                    Select::make('selected_product')
+                        ->hintActions([
+                            Action::make('add')
+                                ->label('اضافة')
+                                ->icon('heroicon-s-plus')
+                                ->color('success')
+                                ->form([
+                                    TextInput::make('name')->label('اسم المنتج')->required(),
+                                    TextInput::make('barcode')->label('باركود المنتج')->required(),
+                                    Select::make('category_id')->label('القسم')->options(Category::pluck('name', 'id'))->required(),
 
-                                TextInput::make('product_name')
-                                    ->label('اسم المنتج')
-                                    ->required(),
+                                ])
+                                ->action(function (array $data) {
+                                    $product = Product::where('barcode', $data['barcode'])->first();
 
-                                Select::make('category_id')
-                                    ->label('الصنف')
-                                    ->options(\App\Models\Category::pluck('name', 'id'))
-                                    ->required(),
+                                    if ($product) {
+                                        Notification::make()->title('المنتج مضاف بالفعل')->warning()->send();
+                                        return;
+                                    }
 
-                                TextInput::make('quantity')
-                                    ->label('الكمية')
-                                    ->numeric()
-                                    ->required()
-                                    ->default(1),
+                                    $product = Product::create([
+                                        'name' => $data['name'],
+                                        'barcode' => $data['barcode'],
+                                        'category_id' => $data['category_id'],
+                                        'stock' => 0,
+                                        'purchase_price' => 0,
+                                        'retail_price' => 0,
+                                        'wholesale_price' => 0,
 
-                                TextInput::make('purchase_price')
-                                    ->label('سعر الشراء')
-                                    ->numeric()
-                                    ->required()
-                                    ->default(0),
+                                    ]);
 
-                                TextInput::make('retail_price')
-                                    ->label('سعر البيع القطاعي')
-                                    ->numeric()
-                                    ->required()
-                                    ->default(0),
-
-                                TextInput::make('wholesale_price')
-                                    ->label('سعر الجملة')
-                                    ->numeric()
-                                    ->required()
-                                    ->default(0),
-                            ]),
+                                    Notification::make()->title('تمت الاضافة بنجاح')->success()->send();
+                                })
                         ])
-                        ->afterStateUpdated(function (callable $set, callable $get) {
-                            $total = 0;
-                            foreach ($get('items') as $item) {
-                                $total += (float) ($item['quantity'] ?? 0) * (float) ($item['purchase_price'] ?? 0);
+                        ->label('اختر منتج')
+                        ->preload()
+                        ->options(Product::pluck('name', 'id'))
+                        ->searchable()
+                        ->getSearchResultsUsing(function (string $search) {
+                            if (is_numeric($search)) {
+                                return Product::where('barcode', $search)->pluck('name', 'id')->toArray();
                             }
 
-                            $total = $total - (float) ($get('discount') ?? 0) + (float) ($get('tax') ?? 0);
-                            $set('total', $total);
+                            return Product::where('name', 'like', "%{$search}%")->pluck('name', 'id')->toArray();
+                        })
+                        ->reactive()
+                        ->afterStateUpdated(function ($state, callable $get, callable $set) {
+                            if (!$state) return;
+
+                            $existing = $get('selected_products') ?? [];
+                            $product = Product::find($state);
+
+                            if (!$product) return;
+
+                            // لو مكرر نمنع الإضافة
+                            foreach ($existing as $item) {
+                                if ($item['id'] == $product->id) {
+                                    Notification::make()->title('المنتج مضاف بالفعل')->warning()->send();
+                                    return;
+                                }
+                            }
+
+                            $existing[] = [
+                                'id' => $product->id,
+                                'product_barcode' => $product->barcode,
+                                'product_name' => $product->name,
+                                'category_id' => $product->category_id,
+                                'quantity' => 1,
+                                'purchase_price' => $product->purchase_price,
+                                'retail_price' => $product->retail_price,
+                                'wholesale_price' => $product->wholesale_price,
+                                'total' => $product->purchase_price,
+                            ];
+
+                            $set('selected_products', $existing);
+                            $set('selected_product', null);
                         }),
                 ]),
+                View::make('components.selected-purchase-products-table')
+                    ->label('')
+                    ->reactive()
+                    ->dehydrated()
+                    ->live(),
+
             ]);
     }
+    public function removeProduct($index)
+    {
+        $products = $this->formData['selected_products'] ?? [];
+        unset($products[$index]);
+        $this->formData['selected_products'] = array_values($products);
+    }
+
+    public function updateTotal($index)
+    {
+        $item = $this->formData['selected_products'][$index];
+
+        $quantity = (float) ($item['quantity'] ?? 1);
+        $price = (float) ($item['purchase_price'] ?? 0);
+
+        $this->formData['selected_products'][$index]['total'] = $quantity * $price;
+
+        // تحديث الإجمالي الكلي
+        $this->formData['total'] = collect($this->formData['selected_products'])->sum(function ($item) {
+            return (float) $item['quantity'] * (float) $item['purchase_price'];
+        }) - (float) ($this->formData['discount'] ?? 0) + (float) ($this->formData['tax'] ?? 0);
+    }
+
 
     public function create(): void
     {
         $data = $this->form->getState();
 
+        $items = $this->formData['selected_products'] ?? [];
+
+        if (empty($items)) {
+            Notification::make()
+                ->title('لا يوجد منتجات')
+                ->body('يجب إضافة منتج واحد على الأقل')
+                ->danger()
+                ->send();
+            return;
+        }
+
         $total = 0;
-        foreach ($data['items'] as $item) {
+        foreach ($items as $item) {
             $name = $item['product_name'];
+
             if ($item['retail_price'] < $item['purchase_price']) {
                 Notification::make()
                     ->title("خطأ في سعر البيع القطاعي")
@@ -172,26 +229,39 @@ class CreatePurchaseInvoice extends Page implements HasForms
                     ->send();
                 return;
             }
+
             $total += $item['quantity'] * $item['purchase_price'];
         }
 
         $data['total'] = $total - $data['discount'] + $data['tax'];
 
+        // حفظ الفاتورة
+        $invoice = PurchaseInvoice::create(collect($data)->except('selected_products', 'selected_product')->toArray());
 
-        $invoice = PurchaseInvoice::create(collect($data)->except('items')->toArray());
+        foreach ($items as $item) {
+            $product = Product::where('barcode', $item['product_barcode'])->first();
 
-        foreach ($data['items'] as $item) {
-            $product = Product::firstOrCreate(
-                ['barcode' => $item['product_barcode']],
-                [
+            if ($product) {
+                $product->update([
+                    'name' => $item['product_name'],
+                    'purchase_price' => $item['purchase_price'],
+                    'retail_price' => $item['retail_price'],
+                    'wholesale_price' => $item['wholesale_price'],
+                    'category_id' => $item['category_id'],
+                ]);
+            } else {
+                $product = Product::create([
+                    'barcode' => $item['product_barcode'],
                     'name' => $item['product_name'],
                     'purchase_price' => $item['purchase_price'],
                     'retail_price' => $item['retail_price'],
                     'wholesale_price' => $item['wholesale_price'],
                     'stock' => 0,
                     'category_id' => $item['category_id'],
-                ]
-            );
+                ]);
+            }
+
+
 
             $product->increment('stock', $item['quantity']);
 

@@ -45,6 +45,7 @@ class CreateSalesInvoice extends Page implements HasForms
                     ->nullable()
                     ->searchable()
                     ->preload()
+                    ->live()
                     ->hintAction(
                         Action::make('add_customer')
                             ->icon('heroicon-o-plus')
@@ -61,8 +62,10 @@ class CreateSalesInvoice extends Page implements HasForms
                                 TextInput::make('email')->label('البريد الالكتروني'),
                                 TextInput::make('address')->label('العنوان'),
                             ])
-                            ->action(function (array $data) {
+                            ->action(function (array $data , callable $get, callable $set) {
                                 Customer::create($data);
+
+                                $set('customer_id', Customer::latest()->first()->id);
                                 Notification::make()
                                     ->success()
                                     ->title('تم اضافة العميل بنجاح');

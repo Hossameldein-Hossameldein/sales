@@ -1,12 +1,13 @@
 <?php
 
+use App\Imports\ExcelReaderImport;
 use Illuminate\Support\Facades\Route;
 use App\Models\SalesInvoice;
 use App\Models\SalesReturn;
+use Maatwebsite\Excel\Facades\Excel;
 
 Route::get('/', function () {
-
-    return view('welcome');
+    return redirect()->to('/admin');
 });
 
 
