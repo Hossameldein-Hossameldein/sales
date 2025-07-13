@@ -17,6 +17,8 @@ use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Forms\Components\{TextInput, Select, Grid, Repeater, Section, Hidden, View};
 use Filament\Forms\Components\Actions\Action;
+use Filament\Forms\Get;
+use Filament\Forms\Set;
 
 class CreatePurchaseInvoice extends Page implements HasForms
 {
@@ -91,12 +93,24 @@ class CreatePurchaseInvoice extends Page implements HasForms
                                 ->icon('heroicon-s-plus')
                                 ->color('success')
                                 ->form([
-                                    TextInput::make('name')->label('اسم المنتج')->required(),
-                                    TextInput::make('barcode')->label('باركود المنتج')->required(),
-                                    Select::make('category_id')->label('القسم')->options(Category::pluck('name', 'id'))->required(),
+                                    Section::make('بيانات المنتج')->schema([
+                                        TextInput::make('name')->label('اسم المنتج')->required(),
+                                        TextInput::make('barcode')->label('باركود المنتج')->required(),
+                                        Select::make('category_id')->label('القسم')->options(Category::pluck('name', 'id'))->required(),
+                                        TextInput::make('purchase_price')
+                                            ->numeric()
+                                            ->label('سعر الشراء')->required(),
+                                        TextInput::make('retail_price')
+                                            ->numeric()
+                                            ->label('سعر البيع قطاعي')->required(),
+                                        TextInput::make('wholesale_price')
+                                            ->numeric()
+                                            ->label('سعر الجملة')->required(),
+                                    ])->columns(2)
+
 
                                 ])
-                                ->action(function (array $data) {
+                                ->action(function (array $data, Get $get, Set $set) {
                                     $product = Product::where('barcode', $data['barcode'])->first();
 
                                     if ($product) {
@@ -109,11 +123,28 @@ class CreatePurchaseInvoice extends Page implements HasForms
                                         'barcode' => $data['barcode'],
                                         'category_id' => $data['category_id'],
                                         'stock' => 0,
-                                        'purchase_price' => 0,
-                                        'retail_price' => 0,
-                                        'wholesale_price' => 0,
+                                        'purchase_price' => $data['purchase_price'],
+                                        'retail_price' => $data['retail_price'],
+                                        'wholesale_price' => $data['wholesale_price'],
 
                                     ]);
+
+                                    $selected_products = $get('selected_products') ?? [];
+
+                                    $selected_products[] = [
+                                        'id' => $product->id,
+                                        'product_barcode' => $product->barcode,
+                                        'product_name' => $product->name,
+                                        'category_id' => $product->category_id,
+                                        'quantity' => 1,
+                                        'purchase_price' =>(int) $product->purchase_price,
+                                        'retail_price' => (int)$product->retail_price,
+                                        'wholesale_price' =>(int) $product->wholesale_price,
+                                        'total' =>(int) $product->purchase_price,
+                                        'barcode' => $product->barcode
+                                    ];
+
+                                    $set('selected_products', $selected_products);
 
                                     Notification::make()->title('تمت الاضافة بنجاح')->success()->send();
                                 })
@@ -122,7 +153,7 @@ class CreatePurchaseInvoice extends Page implements HasForms
                         ->preload()
                         ->options(Product::pluck('name', 'id'))
                         ->searchable()
-                        ->getSearchResultsUsing(function (string $search) {
+                        ->getSearchResultsUsing(function (string $search , Get $get , Set $set) {
                             if (is_numeric($search)) {
                                 return Product::where('barcode', $search)->pluck('name', 'id')->toArray();
                             }
@@ -152,10 +183,11 @@ class CreatePurchaseInvoice extends Page implements HasForms
                                 'product_name' => $product->name,
                                 'category_id' => $product->category_id,
                                 'quantity' => 1,
-                                'purchase_price' => $product->purchase_price,
-                                'retail_price' => $product->retail_price,
-                                'wholesale_price' => $product->wholesale_price,
-                                'total' => $product->purchase_price,
+                                'purchase_price' =>(int) $product->purchase_price,
+                                'retail_price' => (int)$product->retail_price,
+                                'wholesale_price' => (int)$product->wholesale_price,
+                                'total' =>(int) $product->purchase_price,
+                                'barcode' => $product->barcode
                             ];
 
                             $set('selected_products', $existing);
@@ -211,6 +243,15 @@ class CreatePurchaseInvoice extends Page implements HasForms
         $total = 0;
         foreach ($items as $item) {
             $name = $item['product_name'];
+
+            if ($item['quantity'] <= 0) {
+                Notification::make()
+                    ->title("خطاء في كمية المنتج ($name)")
+                    ->body("يجب تحديد كمية المنتج.")
+                    ->danger()
+                    ->send();
+                return;
+            }
 
             if ($item['retail_price'] < $item['purchase_price']) {
                 Notification::make()

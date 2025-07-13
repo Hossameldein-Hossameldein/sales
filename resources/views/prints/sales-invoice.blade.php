@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>فاتورة بيع</title>
+    <title></title>
     <style>
         * {
             box-sizing: border-box;
@@ -11,7 +11,8 @@
         }
 
         body {
-            width: 58mm;
+            width: 85mm;
+            height: 180mm;
             margin: 0 auto;
             padding: 10px;
             background: #fff;
@@ -48,14 +49,47 @@
         .items {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 10px;
+            table-layout: fixed;
+            /* مهمة جداً لتقسيم الأعمدة بالتساوي */
         }
 
         .items th,
         .items td {
             border-bottom: 1px dashed #000;
-            padding: 4px 0;
+            padding: 4px 2px;
             text-align: right;
+            word-wrap: break-word;
+            word-break: break-word;
+            white-space: normal;
+            font-size: 13px;
+        }
+
+        /* عرض مخصص لكل عمود */
+        .items th:nth-child(1),
+        .items td:nth-child(1) {
+            width: 25%;
+            /* اسم المنتج */
+        }
+
+        .items th:nth-child(2),
+        .items td:nth-child(2) {
+            width: 23%;
+            /* الكمية */
+            text-align: center;
+        }
+
+        .items th:nth-child(3),
+        .items td:nth-child(3) {
+            width: 23%;
+            /* السعر */
+            text-align: center;
+        }
+
+        .items th:nth-child(4),
+        .items td:nth-child(4) {
+            width: 29%;
+            /* الإجمالي */
+            text-align: center;
         }
 
         .totals {
@@ -72,6 +106,12 @@
             text-align: center;
             margin-top: 10px;
             font-size: 12px;
+        }
+
+        .info {
+            margin-top: 10px;
+            border-top: 1px dashed #000;
+            padding-top: 5px;
         }
 
         @media print {
@@ -91,9 +131,9 @@
     <div class="title">فاتورة بيع</div>
 
     <div class="info">
-        <div><strong>رقم الفاتورة:</strong> {{ $record->invoice_number }}</div>
+        <div><strong>رقم الفاتورة:</strong> {{ $record->id }}</div>
         <div><strong>التاريخ:</strong> {{ $record->date }}</div>
-        <div><strong>نوع البيع:</strong> {{ $record->sale_type }}</div>
+        <div><strong>نوع البيع:</strong> كاش</div>
         @if ($record->customer)
             <div><strong>العميل:</strong> {{ $record->customer->name }}</div>
         @endif
@@ -112,24 +152,34 @@
         <tbody>
             @foreach ($record->items as $item)
                 <tr>
-                    <td>{{ $item->product_name }}</td>
-                    <td>{{ $item->quantity }}</td>
-                    <td>{{ number_format($item->price, 2) }}</td>
-                    <td>{{ number_format($item->total, 2) }}</td>
+                    <td colspan="1" style="word-break: break-word; white-space: normal; max-width: 40mm;">
+                        {{ $item->product_name }}
+                    </td>
+                    <td colspan="1">{{ (int) $item->quantity }}</td>
+                    <td colspan="1">{{ number_format($item->price, 0) }}</td>
+                    <td colspan="1">{{ number_format($item->total, 0) }}</td>
                 </tr>
             @endforeach
         </tbody>
     </table>
 
     <div class="totals">
-        <div><strong>الخصم:</strong> {{ number_format($record->discount, 2) }} ج</div>
-        <div><strong>الضريبة:</strong> {{ number_format($record->tax, 2) }} ج</div>
-        <div><strong>الإجمالي:</strong> {{ number_format($record->total, 2) }} ج</div>
+        <div><strong>الخصم:</strong> {{ number_format($record->discount, 0) }} ج</div>
+        <div><strong>الضريبة:</strong> {{ number_format($record->tax, 0) }} ج</div>
+        <div><strong>الإجمالي:</strong> {{ number_format($record->total, 0) }} ج</div>
+    </div>
+
+    {{-- location and phone number section --}}
+
+    <div class="info">
+        <div><strong>العنوان:</strong> 121 ش صعب صالح بجوار ملك الفراولة وامام سيد حنفى - عين شمس القاهرة </div>
+        <div><strong>رقم الموبايل:</strong> 01111024128</div>
     </div>
 
     <div class="footer">
-        شكراً لتعاملكم معنا
+        سعداء بزيارتكم لنا
     </div>
+
 
     <script>
         window.print();

@@ -7,14 +7,7 @@ use App\Models\SalesReturn;
 use Maatwebsite\Excel\Facades\Excel;
 
 Route::get('/', function () {
-    
-
-
-
-
-
-
-    return redirect()->to('/');
+    return redirect()->to('/admin');
 });
 
 
