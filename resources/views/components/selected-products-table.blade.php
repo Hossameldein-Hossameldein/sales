@@ -11,7 +11,7 @@
     </thead>
     <tbody>
         @php
-            $products = $this->formData['selected_products'] ?? [];
+            $products = $this->productsState ?? [];
         @endphp
 
         @foreach ($products as $index => $product)
@@ -20,7 +20,7 @@
                 <td class="px-3 py-2 text-center">{{ $product['barcode'] }}</td>
                 <td class="px-3 py-2 text-center">{{ $product['price'] }}</td>
                 <td class="px-3 py-2 text-center">
-                    <input type="number" wire:model.lazy="formData.selected_products.{{ $index }}.quantity"
+                    <input type="number" wire:model="productsState.{{ $index }}.quantity" wire:change="$refresh"
                         class="w-16 border rounded p-1 text-center">
                 </td>
                 <td class="px-3 py-2 text-center">
@@ -35,11 +35,20 @@
         @if (count($products))
     <tfoot>
         <tr class="bg-gray-100 font-bold">
-            <td colspan="4" class="px-3 py-2 text-end">الإجمالي:</td>
-            <td class="px-3 py-2 text-center text-green-600" wire:model="formData.total">
-                {{ number_format($this->formData['total'] ?? 0, 2) }}
+
+
+            <td colspan="1" class="px-3 py-2 text-center">عدد المنتجات:
+                {{ count($products) }}</td>
+            <td colspan="1" class="px-3 py-2 text-center">عدد القطع:
+                {{ collect($products)->sum(fn($product) => $product['quantity']) }}</td>
+
+            <td colspan="1" class="px-3 py-2 text-center">الإجمالي:
+                {{ collect($products)->sum(fn($product) => $product['price'] * $product['quantity']) - $this->formData['discount'] }}
             </td>
-            <td></td>
+            <td colspan="1"></td>
+            <td colspan="1"></td>
+            <td colspan="1"></td>
+
         </tr>
     </tfoot>
     @endif

@@ -27,6 +27,11 @@ class CreateSalesInvoice extends Page implements HasForms
 
     public array $selectedProducts = [];
 
+    public array $productsState = [];
+
+    protected $listeners = ['productSelectedFromSearch'];
+
+
     public function mount(): void
     {
         $this->form->fill([
@@ -34,6 +39,44 @@ class CreateSalesInvoice extends Page implements HasForms
         ]);
     }
 
+    public function productSelectedFromSearch($productId)
+    {
+        $product = Product::find($productId);
+        if (!$product) return;
+
+        $existing = $this->productsState ?? [];
+
+        foreach ($existing as $i => $item) {
+            if ($item['id'] == $productId) {
+                $this->productsState[$i]['quantity']++;
+                Notification::make()->title('مضاف بالفعل وتم تزويد العدد واحد')->warning()->send();
+                return;
+            }
+        }
+
+        $existing[] = [
+            'id' => $product->id,
+            'name' => $product->name,
+            'barcode' => $product->barcode,
+            'price' => $this->formData['sale_type'] == 'قطاعي'
+                ? $product->retail_price
+                : $product->wholesale_price,
+            'quantity' => 1,
+            'stock' => $product->stock,
+            'total' => $this->formData['sale_type'] == 'قطاعي'
+                ? $product->retail_price
+                : $product->wholesale_price,
+        ];
+
+        $this->productsState = $existing;
+        $this->selectedProducts = $existing;
+
+        $total = 0;
+        foreach ($existing as $item) {
+            $total += $item['total'] * $item['quantity'];
+        }
+        $this->formData['total'] = $total - ($this->formData['discount'] ?? 0);
+    }
     public function form(Form $form): Form
     {
         return $form->schema([
@@ -62,7 +105,7 @@ class CreateSalesInvoice extends Page implements HasForms
                                 TextInput::make('email')->label('البريد الالكتروني'),
                                 TextInput::make('address')->label('العنوان'),
                             ])
-                            ->action(function (array $data , callable $get, callable $set) {
+                            ->action(function (array $data, callable $get, callable $set) {
                                 Customer::create($data);
 
                                 $set('customer_id', Customer::latest()->first()->id);
@@ -99,67 +142,74 @@ class CreateSalesInvoice extends Page implements HasForms
             ])->columns(4),
 
             Section::make('المنتجات')->schema([
-                Select::make('selected_product')
-                    ->label('اختر منتج')
-                    ->options(Product::pluck('name', 'id'))
-                    ->searchable()
+                // Select::make('selected_product')
+                //     ->label('اختر منتج')
+                //     ->options(Product::pluck('name', 'id'))
+                //     ->searchable()
+                //     ->reactive()
+                //     ->getSearchResultsUsing(function (string $search) {
+                //         if (is_numeric($search)) {
+                //             return Product::where('barcode', $search)->pluck('name', 'id');
+                //         }
+
+                //         return Product::where('name', 'like', '%' . $search . '%')->pluck('name', 'id');
+                //     })
+                //     ->afterStateUpdated(function ($state, callable $get, callable $set) {
+                //         if (!$state) return;
+
+                //         $existing = $this->productsState ?? [];
+                //         $product = Product::find($state);
+                //         if (!$product) return;
+
+                //         // منع التكرار
+                //         foreach ($existing as $item) {
+                //             if ($item['id'] == $state) {
+                //                 Notification::make()
+                //                     ->title('المنتج مضاف بالفعل')
+                //                     ->warning()
+                //                     ->send();
+                //                 $set('selected_product', null);
+                //                 return;
+                //             }
+                //         }
+
+                //         $existing[] = [
+                //             'id' => $product->id,
+                //             'name' => $product->name,
+                //             'barcode' => $product->barcode,
+                //             'price' => $get('sale_type') == 'قطاعي' ? $product->retail_price : $product->wholesale_price,
+                //             'quantity' => 1,
+                //             'stock' => $product->stock,
+                //             'total' => $product->retail_price,
+                //         ];
+
+
+                //         $set('selected_products', $existing);
+
+                //         $this->selectedProducts = $existing;
+                //         $total = 0;
+
+                //         foreach ($existing as $item) {
+                //             $total += $item['total'] * $item['quantity'];
+                //         }
+
+                //         $set('total', $total);
+
+                //         $set('selected_product', null); // إعادة ضبط السلكت
+                //     }),
+                \Filament\Forms\Components\View::make('components.products-search')
+                    ->live()
                     ->reactive()
-                    ->getSearchResultsUsing(function (string $search) {
-                        if (is_numeric($search)) {
-                            return Product::where('barcode', $search)->pluck('name', 'id');
-                        }
-
-                        return Product::where('name', 'like', '%' . $search . '%')->pluck('name', 'id');
-                    })
-                    ->afterStateUpdated(function ($state, callable $get, callable $set) {
-                        if (!$state) return;
-
-                        $existing = $this->formData['selected_products'] ?? [];
-                        $product = Product::find($state);
-                        if (!$product) return;
-
-                        // منع التكرار
-                        foreach ($existing as $item) {
-                            if ($item['id'] == $state) {
-                                Notification::make()
-                                    ->title('المنتج مضاف بالفعل')
-                                    ->warning()
-                                    ->send();
-                                $set('selected_product', null);
-                                return;
-                            }
-                        }
-
-                        $existing[] = [
-                            'id' => $product->id,
-                            'name' => $product->name,
-                            'barcode' => $product->barcode,
-                            'price' => $get('sale_type') == 'قطاعي' ? $product->retail_price : $product->wholesale_price,
-                            'quantity' => 1,
-                            'stock' => $product->stock,
-                            'total' => $product->retail_price,
-                        ];
-
-
-                        $set('selected_products', $existing);
-
-                        $this->selectedProducts = $existing;
-                        $total = 0;
-
-                        foreach ($existing as $item) {
-                            $total += $item['total'] * $item['quantity'];
-                        }
-
-                        $set('total', $total);
-
-                        $set('selected_product', null); // إعادة ضبط السلكت
-                    })
+                    ->label(''),
 
             ]),
+
+
             \Filament\Forms\Components\View::make('components.selected-products-table')
                 ->live()
                 ->reactive()
                 ->label(''),
+
 
 
             Section::make('ملاحظات')->schema([
@@ -172,26 +222,25 @@ class CreateSalesInvoice extends Page implements HasForms
 
     public function removeProduct($index)
     {
-        $products = $this->formData['selected_products'] ?? [];
+        $products = $this->productsState ?? [];
         unset($products[$index]);
-        $this->formData['selected_products'] = $products;
-        $this->selectedProducts = $products;
+        $this->productsState = $products;
     }
 
     public function updatedFormDataSelectedProducts()
     {
         $total = 0;
 
-        foreach ($this->formData['selected_products'] as $index => $item) {
+        foreach ($this->productsState as $index => $item) {
             $qty = (float) $item['quantity'];
             $price = (float) $item['price'];
-            $this->formData['selected_products'][$index]['total'] = $qty * $price;
+            $this->productsState[$index]['total'] = $qty * $price;
 
-            $total += $this->formData['selected_products'][$index]['total'];
+            $total += $this->productsState[$index]['total'];
         }
         $this->formData['total'] = $total - ($this->formData['discount'] ?? 0);
 
-        $this->selectedProducts = $this->formData['selected_products'];
+        $this->selectedProducts = $this->productsState;
     }
 
     public function updated($name, $value)
@@ -199,14 +248,14 @@ class CreateSalesInvoice extends Page implements HasForms
         if (Str::startsWith($name, 'formData.selected_products')) {
             $total = 0;
 
-            foreach ($this->formData['selected_products'] ?? [] as $i => &$item) {
+            foreach ($this->productsState ?? [] as $i => &$item) {
                 $item['total'] = (float) $item['price'] * (float) ($item['quantity'] ?? 1);
                 $total += $item['total'];
             }
 
             $this->formData['total'] = $total - ($this->formData['discount'] ?? 0);
 
-            $this->selectedProducts = $this->formData['selected_products'];
+            $this->selectedProducts = $this->productsState;
         }
     }
 
@@ -222,7 +271,7 @@ class CreateSalesInvoice extends Page implements HasForms
                 $data['invoice_number'] = 'INV-' . now()->format('Ymd-His');
             }
 
-            $items = $this->selectedProducts ?? [];
+            $items = $this->productsState ?? [];
 
             // تحقق من صحة المنتجات
             foreach ($items as $index => $item) {
@@ -235,7 +284,7 @@ class CreateSalesInvoice extends Page implements HasForms
                     return;
                 }
 
-                if ($item['quantity'] > $item['stock']) {
+                if ($item['quantity'] > Product::find($item['id'])['stock']) {
                     Notification::make()
                         ->title("خطاء في المنتج " . ($item['name'] ?? ''))
                         ->body("تأكد من صحة كمية المنتج")
